@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
-const supabase = require("../../config/supabase");  // ← Ajusta la ruta: desde api/routes/ sube dos niveles
+const supabase = require("../config/supabase");  // ← Ajusta la ruta: desde api/routes/ sube dos niveles
 
 // Crear Payment Intent
 router.post("/create-payment-intent", async (req, res) => {

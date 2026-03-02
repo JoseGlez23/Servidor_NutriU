@@ -27,7 +27,7 @@ app.get("/health", (req, res) => {
 });
 
 // Rutas de pagos (tu paymentRoutes)
-const paymentRoutes = require("./routes/paymentRoutes");
+const paymentRoutes = require("./paymentRoutes");
 app.use("/payments", paymentRoutes);
 
 // Webhook (mantengo tu lógica exacta, solo quito ngrok y agrego logs claros)
