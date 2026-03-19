@@ -28,7 +28,16 @@ app.get("/health", (req, res) => {
 
 // Rutas de pagos (tu paymentRoutes)
 const paymentRoutes = require("./paymentRoutes");
+const { finalizePaymentRecord } = paymentRoutes;
 app.use("/payments", paymentRoutes);
+
+// Rutas de notificaciones push
+const notificationRoutes = require("./notificationRoutes");
+app.use("/notifications", notificationRoutes);
+
+// Rutas de canjes (rewards/discounts y gamificación)
+const exchangeRoutes = require("./exchangeRoutes");
+app.use("/exchange", exchangeRoutes);
 
 // Webhook (mantengo tu lógica exacta, solo quito ngrok y agrego logs claros)
 app.post(
@@ -56,31 +65,21 @@ app.post(
     // Manejo del evento de pago exitoso
     if (event.type === "payment_intent.succeeded") {
       const paymentIntent = event.data.object;
-      const { appointmentId, userId, monto } = paymentIntent.metadata || {};
+      const { appointmentId, monto } = paymentIntent.metadata || {};
 
       console.log(
-        `[WEBHOOK] Pago confirmado - Cita: ${appointmentId || "sin ID"}, User: ${userId || "sin ID"}, Monto: ${monto || "sin monto"}`,
+        `[WEBHOOK] Pago confirmado - Cita: ${appointmentId || "sin ID"}, Monto: ${monto || "sin monto"}`,
       );
 
       try {
-        // Actualiza estado de cita
-        if (appointmentId) {
-          await supabase
-            .from("citas")
-            .update({ estado: "completada" })
-            .eq("id_cita", appointmentId);
+        if (!appointmentId) {
+          throw new Error("appointmentId faltante en metadata");
         }
 
-        // Registra pago
-        await supabase.from("pagos").insert({
-          id_cita: appointmentId || null,
-          id_paciente: userId || null,
-          monto: parseFloat(monto || paymentIntent.amount / 100), // fallback por si no hay metadata
-          metodo_pago: "stripe",
-          estado: "completado",
-          stripe_payment_id: paymentIntent.id,
-          fecha_pago: new Date().toISOString(),
-        });
+        const result = await finalizePaymentRecord(paymentIntent.id);
+        if (result?.alreadyRegistered) {
+          return res.json({ received: true, alreadyRegistered: true });
+        }
       } catch (dbErr) {
         console.error("[WEBHOOK] Error actualizando Supabase:", dbErr.message);
         // No retornamos error a Stripe, solo logueamos (Stripe reintentará si falla)
