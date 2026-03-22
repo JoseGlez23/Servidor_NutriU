@@ -3,11 +3,6 @@ const supabase = require("../config/supabase");
 const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
 const router = express.Router();
 
-/**
- * POST /notifications/custom
- * Envía una notificación personalizada (por ejemplo, nuevo canje)
- * Body: { pacienteId: number, titulo: string, mensaje: string, datosAdicionales: object, tipo?: string }
- */
 router.post("/custom", async (req, res) => {
   try {
     const { pacienteId, titulo, mensaje, datosAdicionales, tipo } =
@@ -19,7 +14,6 @@ router.post("/custom", async (req, res) => {
       });
     }
 
-    // Guardar en la tabla notificaciones
     const { error: dbNotifError } = await supabase
       .from("notificaciones")
       .insert({
@@ -32,14 +26,7 @@ router.post("/custom", async (req, res) => {
         fecha_envio: new Date().toISOString(),
         datos_adicionales: datosAdicionales || {},
       });
-    if (dbNotifError) {
-      console.error(
-        "[NOTIF] Error guardando notificación:",
-        dbNotifError.message,
-      );
-    }
 
-    // Enviar push si tiene token
     const { data: tokens } = await supabase
       .from("push_tokens")
       .select("token")
@@ -69,11 +56,9 @@ router.post("/custom", async (req, res) => {
 
     return res.json({ success: true });
   } catch (error) {
-    console.error("[PUSH] Error en /custom:", error.message);
     return res.status(500).json({ success: false, error: error.message });
   }
-}); // Correctly closed endpoint
-// Removed duplicate declarations
+}); 
 
 /**
  * Valida que un token tenga el formato correcto de Expo
@@ -108,13 +93,6 @@ async function notifyPatientDevices({
     datos_adicionales: data,
   });
 
-  if (dbNotifError) {
-    console.error(
-      "[NOTIF] Error guardando notificación:",
-      dbNotifError.message,
-    );
-  }
-
   const { data: tokens, error: tokenError } = await supabase
     .from("push_tokens")
     .select("token")
@@ -122,7 +100,6 @@ async function notifyPatientDevices({
     .eq("is_active", true);
 
   if (tokenError) {
-    console.error("[PUSH] Error obteniendo tokens:", tokenError.message);
     return { sent: 0, savedInDB: !dbNotifError };
   }
 
@@ -155,11 +132,6 @@ async function notifyPatientDevices({
   };
 }
 
-/**
- * POST /notifications/appointment-status
- * Envía notificación cuando una cita cambia a confirmada o completada.
- * Body: { pacienteId:number, idCita:number, fechaCita?:string, nutriologoNombre?:string, status:'confirmed'|'completed' }
- */
 router.post("/appointment-status", async (req, res) => {
   try {
     const { pacienteId, idCita, fechaCita, nutriologoNombre, status } =
@@ -206,17 +178,14 @@ router.post("/appointment-status", async (req, res) => {
       status: isConfirmed ? "confirmada" : "completada",
     };
 
-    // Obtener tokens push
     const { data: tokens } = await supabase
       .from("push_tokens")
       .select("token")
       .eq("id_paciente", pacienteId)
       .eq("is_active", true);
-    console.log("[CUSTOM NOTIF] Tokens encontrados:", tokens);
 
     if (tokens && tokens.length > 0) {
       const validTokens = tokens.filter((t) => isValidExpoPushToken(t.token));
-      console.log("[CUSTOM NOTIF] Tokens válidos:", validTokens);
       if (validTokens.length > 0) {
         const messages = validTokens.map((t) => ({
           to: t.token,
@@ -232,23 +201,16 @@ router.post("/appointment-status", async (req, res) => {
           priority: "high",
           channelId: "default",
         }));
-        console.log("[CUSTOM NOTIF] Mensajes push:", messages);
         await sendPushNotifications(messages);
       }
     }
 
     return res.json({ success: true });
   } catch (error) {
-    console.error("[PUSH] Error en /appointment-status:", error);
     return res.status(500).json({ success: false, error: error.message });
   }
 });
 
-/**
- * POST /notifications/appointment-request
- * Envía notificación cuando el nutriólogo agenda una cita
- * Body: { pacienteId: number, nutriologoNombre: string, fechaCita: string, idCita: number }
- */
 router.post("/appointment-request", async (req, res) => {
   try {
     const { pacienteId, nutriologoNombre, fechaCita, idCita } = req.body;
@@ -282,13 +244,6 @@ router.post("/appointment-request", async (req, res) => {
         },
       });
 
-    if (dbNotifError) {
-      console.error(
-        "[NOTIF] Error guardando notificación:",
-        dbNotifError.message,
-      );
-    }
-
     const { data: tokens } = await supabase
       .from("push_tokens")
       .select("token")
@@ -320,16 +275,10 @@ router.post("/appointment-request", async (req, res) => {
 
     return res.json({ success: true, savedInDB: !dbNotifError });
   } catch (error) {
-    console.error("[PUSH] Error en /appointment-request:", error.message);
     return res.status(500).json({ success: false, error: error.message });
   }
 });
 
-/**
- * POST /notifications/points-awarded
- * Envía notificación cuando se asignan puntos al paciente
- * Body: { pacienteId: number, puntos: number, motivo: string }
- */
 router.post("/points-awarded", async (req, res) => {
   try {
     const { pacienteId, puntos, motivo } = req.body;
@@ -341,7 +290,7 @@ router.post("/points-awarded", async (req, res) => {
       });
     }
 
-    const tituloNotif = "⭐ ¡Puntos obtenidos!";
+    const tituloNotif = "¡Puntos obtenidos!";
     const mensajeNotif = `Has ganado ${puntos} puntos${motivo ? ` por ${motivo}` : ""}. ¡Sigue así!`;
 
     const { error: dbNotifError } = await supabase
@@ -360,13 +309,6 @@ router.post("/points-awarded", async (req, res) => {
           motivo: motivo || null,
         },
       });
-
-    if (dbNotifError) {
-      console.error(
-        "[NOTIF] Error guardando notificación:",
-        dbNotifError.message,
-      );
-    }
 
     const { data: tokens } = await supabase
       .from("push_tokens")
@@ -397,16 +339,10 @@ router.post("/points-awarded", async (req, res) => {
 
     return res.json({ success: true, savedInDB: !dbNotifError });
   } catch (error) {
-    console.error("[PUSH] Error en /points-awarded:", error.message);
     return res.status(500).json({ success: false, error: error.message });
   }
 });
 
-/**
- * POST /notifications/register-token
- * Registra o actualiza un token de dispositivo
- * Body: { pacienteId: number, token: string, deviceType?: string }
- */
 router.post("/register-token", async (req, res) => {
   try {
     const { pacienteId, token, deviceType = "mobile" } = req.body;
@@ -457,14 +393,12 @@ router.post("/register-token", async (req, res) => {
       .select();
 
     if (error) {
-      console.error("[PUSH] Error registrando token:", error.message);
       return res.status(500).json({
         success: false,
         error: "Error al registrar token",
       });
     }
 
-    console.log(`[PUSH] Token registrado para paciente ${pacienteId}`);
 
     return res.json({
       success: true,
@@ -472,7 +406,6 @@ router.post("/register-token", async (req, res) => {
       data,
     });
   } catch (error) {
-    console.error("[PUSH] Error en /register-token:", error.message);
     return res.status(500).json({
       success: false,
       error: error.message,
@@ -480,11 +413,6 @@ router.post("/register-token", async (req, res) => {
   }
 });
 
-/**
- * DELETE /notifications/remove-token
- * Elimina o desactiva un token de dispositivo
- * Body: { pacienteId: number, token: string }
- */
 router.delete("/remove-token", async (req, res) => {
   try {
     const { pacienteId, token } = req.body;
@@ -503,21 +431,17 @@ router.delete("/remove-token", async (req, res) => {
       .eq("token", token);
 
     if (error) {
-      console.error("[PUSH] Error eliminando token:", error.message);
       return res.status(500).json({
         success: false,
         error: "Error al eliminar token",
       });
     }
 
-    console.log(`[PUSH] Token desactivado para paciente ${pacienteId}`);
-
     return res.json({
       success: true,
       message: "Token desactivado correctamente",
     });
   } catch (error) {
-    console.error("[PUSH] Error en /remove-token:", error.message);
     return res.status(500).json({
       success: false,
       error: error.message,
@@ -525,11 +449,6 @@ router.delete("/remove-token", async (req, res) => {
   }
 });
 
-/**
- * POST /notifications/test
- * Envía una notificación de prueba
- * Body: { pacienteId: number }
- */
 router.post("/test", async (req, res) => {
   try {
     const { pacienteId } = req.body;
@@ -559,7 +478,7 @@ router.post("/test", async (req, res) => {
     const messages = validTokens.map((t) => ({
       to: t.token,
       sound: "default",
-      title: "🔔 Notificación de prueba",
+      title: "Notificación de prueba",
       body: "¡Tu sistema de notificaciones está funcionando correctamente!",
       data: { type: "test" },
     }));
@@ -572,7 +491,6 @@ router.post("/test", async (req, res) => {
       result,
     });
   } catch (error) {
-    console.error("[PUSH] Error en /test:", error.message);
     return res.status(500).json({
       success: false,
       error: error.message,
@@ -580,17 +498,10 @@ router.post("/test", async (req, res) => {
   }
 });
 
-// Placeholder for sendPushNotifications
 async function sendPushNotifications(messages) {
-  // Implement push notification logic here
   return { success: true, messagesSent: messages.length };
 }
 
-/**
- * POST /diet-updated
- * Envía notificación push cuando el nutriólogo asigna o actualiza un plan nutricional
- * Body: { pacienteId: number, nutriologoNombre?: string, dietaNombre?: string, action: 'created' | 'updated', mealUpdatedLabel?: string, dayUpdatedLabel?: string }
- */
 router.post("/diet-updated", async (req, res) => {
   try {
     const {
@@ -609,7 +520,7 @@ router.post("/diet-updated", async (req, res) => {
     }
 
     const isUpdate = action === "updated";
-    const titulo = isUpdate ? "🍽️ Plan actualizado" : "🥗 Nuevo plan asignado";
+    const titulo = isUpdate ? "Plan actualizado" : "Nuevo plan asignado";
     let mensaje = nutriologoNombre
       ? `Tu nutriólogo ${nutriologoNombre} ${isUpdate ? "actualizó" : "asignó"} tu plan nutricional${dietaNombre ? `: ${dietaNombre}` : "."}`
       : `Se ${isUpdate ? "actualizó" : "asignó"} tu plan nutricional${dietaNombre ? `: ${dietaNombre}` : "."}`;
@@ -617,7 +528,6 @@ router.post("/diet-updated", async (req, res) => {
       mensaje += ` (${[mealUpdatedLabel, dayUpdatedLabel].filter(Boolean).join(", ")})`;
     }
 
-    // Guardar en la tabla notificaciones (tipo permitido: 'sistema')
     const { error: dbNotifError } = await supabase
       .from("notificaciones")
       .insert({
@@ -636,14 +546,7 @@ router.post("/diet-updated", async (req, res) => {
           dayUpdatedLabel: dayUpdatedLabel || null,
         },
       });
-    if (dbNotifError) {
-      console.error(
-        "[NOTIF] Error guardando notificación:",
-        dbNotifError.message,
-      );
-    }
 
-    // Buscar tokens push activos
     const { data: tokens } = await supabase
       .from("push_tokens")
       .select("token")
@@ -676,10 +579,8 @@ router.post("/diet-updated", async (req, res) => {
 
     return res.json({ success: true });
   } catch (error) {
-    console.error("[PUSH] Error en /diet-updated:", error.message);
     return res.status(500).json({ success: false, error: error.message });
   }
 });
 
 module.exports = router;
-// End of file: ensure all brackets are closed
